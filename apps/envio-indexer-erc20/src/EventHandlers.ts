@@ -7,82 +7,79 @@ import {
 
 import { AccountEntity, ApprovalEntity } from "../generated/src/Types.gen";
 
+// Loader for Approval event
 ERC20Contract_Approval_loader(({ event, context }) => {
-  // loading the required Account entity
+  // Load the owner and spender accounts to ensure they are in the context cache
   context.Account.load(event.params.owner.toString());
+  context.Account.load(event.params.spender.toString());
 });
 
+// Handler for Approval event
 ERC20Contract_Approval_handler(({ event, context }) => {
-  //  getting the owner Account entity
+  // Retrieve or create the owner account
   let ownerAccount = context.Account.get(event.params.owner.toString());
-
-  if (ownerAccount === undefined) {
-    // Usually an accoun that is being approved alreay has/has had a balance, but it is possible they havent.
-
-    // create the account
-    let accountObject: AccountEntity = {
+  if (!ownerAccount) {
+    ownerAccount = {
       id: event.params.owner.toString(),
-      balance: 0n,
+      balance: 0n, // Assuming 0 balance initially for new accounts
     };
-    context.Account.set(accountObject);
+    context.Account.set(ownerAccount);
   }
 
-  let approvalId =
-    event.params.owner.toString() + "-" + event.params.spender.toString();
+  // Retrieve or create the spender account
+  let spenderAccount = context.Account.get(event.params.spender.toString());
+  if (!spenderAccount) {
+    spenderAccount = {
+      id: event.params.spender.toString(),
+      balance: 0n, // Assuming 0 balance initially for new accounts
+    };
+    context.Account.set(spenderAccount);
+  }
 
-  let approvalObject: ApprovalEntity = {
+  // Create or update the approval entity
+  const approvalId = `${event.params.owner.toString()}-${event.params.spender.toString()}`;
+  const approvalObject: ApprovalEntity = {
     id: approvalId,
     amount: event.params.value,
-    owner_id: event.params.owner.toString(),
-    spender_id: event.params.spender.toString(),
+    owner_id: ownerAccount.id,
+    spender_id: spenderAccount.id,
   };
 
-  // this is the same for create or update as the amount is overwritten
   context.Approval.set(approvalObject);
 });
 
+// Loader for Transfer event
 ERC20Contract_Transfer_loader(({ event, context }) => {
+  // Load the sender and receiver accounts to ensure they are in the context cache
   context.Account.load(event.params.from.toString());
   context.Account.load(event.params.to.toString());
 });
 
+// Handler for Transfer event
 ERC20Contract_Transfer_handler(({ event, context }) => {
+  // Retrieve or create the sender account
   let senderAccount = context.Account.get(event.params.from.toString());
-
-  if (senderAccount === undefined || senderAccount === null) {
-    // create the account
-    // This is likely only ever going to be the zero address in the case of the first mint
-    let accountObject: AccountEntity = {
+  if (!senderAccount) {
+    senderAccount = {
       id: event.params.from.toString(),
-      balance: 0n - event.params.value,
+      balance: 0n, // Assuming 0 balance for accounts that don't exist yet
     };
-
-    context.Account.set(accountObject);
-  } else {
-    // subtract the balance from the existing users balance
-    let accountObject: AccountEntity = {
-      id: senderAccount.id,
-      balance: senderAccount.balance - event.params.value,
-    };
-    context.Account.set(accountObject);
   }
 
+  // Update the sender's balance
+  senderAccount.balance -= event.params.value;
+  context.Account.set(senderAccount);
+
+  // Retrieve or create the receiver account
   let receiverAccount = context.Account.get(event.params.to.toString());
-
-  if (receiverAccount === undefined || receiverAccount === null) {
-    // create new account
-    let accountObject: AccountEntity = {
+  if (!receiverAccount) {
+    receiverAccount = {
       id: event.params.to.toString(),
-      balance: event.params.value,
+      balance: 0n, // Assuming 0 balance for new accounts
     };
-    context.Account.set(accountObject);
-  } else {
-    // update existing account
-    let accountObject: AccountEntity = {
-      id: receiverAccount.id,
-      balance: receiverAccount.balance + event.params.value,
-    };
-
-    context.Account.set(accountObject);
   }
+
+  // Update the receiver's balance
+  receiverAccount.balance += event.params.value;
+  context.Account.set(receiverAccount);
 });
